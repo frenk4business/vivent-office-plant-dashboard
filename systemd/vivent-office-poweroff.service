@@ -1,0 +1,6 @@
+[Unit]
+Description=Power off the Vivent office dashboard Pi
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl poweroff --no-wall --no-ask-password

@@ -1,0 +1,12 @@
+[Unit]
+Description=Power off the Vivent office dashboard daily at 17:00
+
+[Timer]
+OnCalendar=*-*-* 17:00:00
+AccuracySec=1s
+RandomizedDelaySec=0
+Persistent=false
+Unit=vivent-office-poweroff.service
+
+[Install]
+WantedBy=timers.target

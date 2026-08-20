@@ -1,0 +1,18 @@
+[Unit]
+Description=Vivent Office Plants native dashboard
+After=graphical-session.target network.target
+Wants=network-online.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/vivent-dashboard
+ExecStart=%h/vivent-dashboard/bin/start-dashboard
+Restart=always
+RestartSec=5
+TimeoutStopSec=10
+Environment=PYTHONUNBUFFERED=1
+Environment=QT_LOGGING_RULES=qt.qpa.wayland=false
+
+[Install]
+WantedBy=default.target

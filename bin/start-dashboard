@@ -1,0 +1,29 @@
+#!/bin/sh
+set -eu
+
+runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+attempt=0
+while [ "$attempt" -lt 60 ]; do
+    if [ -S "$runtime_dir/wayland-0" ]; then
+        export WAYLAND_DISPLAY=wayland-0
+        break
+    fi
+    if [ -S "$runtime_dir/wayland-1" ]; then
+        export WAYLAND_DISPLAY=wayland-1
+        break
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+done
+
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    echo "Wayland display did not become available" >&2
+    exit 1
+fi
+
+export XDG_RUNTIME_DIR="$runtime_dir"
+export QT_QPA_PLATFORM=wayland
+if /usr/bin/python3 -c "import vivent_dashboard_private.repository" >/dev/null 2>&1; then
+    exec /usr/bin/python3 -m vivent_dashboard
+fi
+exec /usr/bin/python3 -m vivent_dashboard --mock
