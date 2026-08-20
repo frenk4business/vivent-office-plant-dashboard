@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from pathlib import Path
 import subprocess
@@ -8,7 +8,7 @@ import threading
 from typing import Callable
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QCursor, QPixmap
+from PySide6.QtGui import QColor, QCursor, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -41,6 +41,7 @@ LIGHT_BG = "#f3f7f4"
 CARD_BG = "#ffffff"
 POWER_OFF_COMMAND = ["/usr/bin/systemctl", "poweroff", "--no-wall", "--no-ask-password"]
 LOGO_PATH = Path(__file__).with_name("assets") / "vivent-logo.png"
+LOGO_CROP = (225, 56, 1459, 966)
 
 
 class RefreshSignals(QObject):
@@ -49,20 +50,60 @@ class RefreshSignals(QObject):
     shutdown_failure = Signal(str)
 
 
+def _official_logo() -> QPixmap:
+    logo = QPixmap(str(LOGO_PATH))
+    if logo.isNull():
+        return logo
+    # The official media asset includes transparent padding around the logo.
+    return logo.copy(*LOGO_CROP)
+
+
 class LogoWidget(QLabel):
     def __init__(self) -> None:
         super().__init__()
         self.setFixedSize(150, 94)
         self.setAlignment(Qt.AlignCenter)
-        logo = QPixmap(str(LOGO_PATH))
+        logo = _official_logo()
         if logo.isNull():
             LOG.warning("Could not load Vivent logo from %s", LOGO_PATH)
             self.setText("Vivent Biosignals")
             return
 
-        # The official media asset includes transparent padding around the logo.
-        logo = logo.copy(225, 56, 1459, 966)
         self.setPixmap(logo.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+
+class WatermarkTable(QTableWidget):
+    def __init__(self, rows: int, columns: int) -> None:
+        super().__init__(rows, columns)
+        self.watermark = _official_logo()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        super().paintEvent(event)
+        if self.watermark.isNull():
+            return
+
+        if self.rowCount():
+            last_row = self.rowCount() - 1
+            blank_top = self.rowViewportPosition(last_row) + self.rowHeight(last_row) + 12
+        else:
+            blank_top = 12
+        available_height = self.viewport().height() - blank_top - 12
+        if available_height < 80:
+            return
+
+        maximum_width = min(340, int(self.viewport().width() * 0.32))
+        maximum_height = min(230, int(available_height * 0.78))
+        logo = self.watermark.scaled(
+            maximum_width,
+            maximum_height,
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation,
+        )
+        x = (self.viewport().width() - logo.width()) // 2
+        y = blank_top + (available_height - logo.height()) // 2
+        painter = QPainter(self.viewport())
+        painter.setOpacity(0.10)
+        painter.drawPixmap(x, y, logo)
 
 
 class DashboardWindow(QMainWindow):
@@ -168,10 +209,53 @@ class DashboardWindow(QMainWindow):
         squad_header.addWidget(self.squad_count)
         squad_layout.addLayout(squad_header)
         self.squad_table = self._table(
-            ["Plant", "Health", "Status", "Main issue", "Water", "Activity", "Nutrients", "Updated"]
+            ["Plant", "Health", "Status", "Main issue", "Water", "Activity", "Nutrients", "Updated"],
+            watermark=True,
         )
         squad_layout.addWidget(self.squad_table)
         root_layout.addWidget(squad_card, 1)
+
+        self.potw_card = self._card()
+        self.potw_card.setObjectName("plantOfWeek")
+        potw_layout = QHBoxLayout(self.potw_card)
+        potw_layout.setContentsMargins(18, 8, 18, 8)
+        potw_layout.setSpacing(12)
+
+        potw_heading = QVBoxLayout()
+        potw_heading.setSpacing(1)
+        potw_title = QLabel("★  PLANT VAN DE WEEK")
+        potw_title.setObjectName("potwTitle")
+        self.potw_period = QLabel()
+        self.potw_period.setObjectName("potwPeriod")
+        potw_heading.addWidget(potw_title)
+        potw_heading.addWidget(self.potw_period)
+        potw_layout.addLayout(potw_heading)
+
+        self.potw_name = QLabel()
+        self.potw_name.setObjectName("potwName")
+        self.potw_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.potw_name.setWordWrap(True)
+        potw_layout.addWidget(self.potw_name, 1)
+
+        self.potw_badge = QLabel()
+        self.potw_badge.setObjectName("potwBadge")
+        self.potw_badge.setAlignment(Qt.AlignCenter)
+        potw_layout.addWidget(self.potw_badge)
+
+        self.potw_score = QLabel()
+        self.potw_score.setObjectName("potwScore")
+        self.potw_score.setAlignment(Qt.AlignCenter)
+        potw_layout.addWidget(self.potw_score)
+
+        self.potw_meta = QLabel()
+        self.potw_meta.setObjectName("potwMeta")
+        self.potw_meta.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.potw_meta.setWordWrap(True)
+        self.potw_meta.setMinimumWidth(195)
+        self.potw_meta.setMaximumWidth(215)
+        potw_layout.addWidget(self.potw_meta)
+        self.potw_card.setFixedHeight(72)
+        root_layout.addWidget(self.potw_card, 0)
 
         footer = QHBoxLayout()
         footer.addStretch()
@@ -199,8 +283,8 @@ class DashboardWindow(QMainWindow):
         return card
 
     @staticmethod
-    def _table(headers: list[str]) -> QTableWidget:
-        table = QTableWidget(0, len(headers))
+    def _table(headers: list[str], watermark: bool = False) -> QTableWidget:
+        table = WatermarkTable(0, len(headers)) if watermark else QTableWidget(0, len(headers))
         table.setHorizontalHeaderLabels(headers)
         table.verticalHeader().setVisible(False)
         table.setShowGrid(False)
@@ -251,6 +335,7 @@ class DashboardWindow(QMainWindow):
             self.connection_label.setStyleSheet(f"color: {GREEN};")
         self._render_water(data)
         self._render_squad(data)
+        self._render_plant_of_week(data)
 
     def _render_water(self, data: DashboardData) -> None:
         alerts = data.water_alerts
@@ -304,6 +389,41 @@ class DashboardWindow(QMainWindow):
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
+
+    def _render_plant_of_week(self, data: DashboardData) -> None:
+        winner = data.plant_of_week
+        if winner is None:
+            current = datetime.now().astimezone()
+            start = (current - timedelta(days=current.weekday())).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            end = start + timedelta(days=7) - timedelta(seconds=1)
+            self.potw_period.setText(f"{_week_label(start, end)}  •  TUSSENSTAND")
+            self.potw_name.setText("Nog niet genoeg data")
+            self.potw_badge.setText("MIN. DATA NODIG")
+            self.potw_score.setText("—")
+            self.potw_meta.setText("Wacht op voldoende geldige weekdata")
+            return
+
+        state = "EINDSTAND" if winner.is_final else "TUSSENSTAND"
+        self.potw_period.setText(f"{_week_label(winner.week_start, winner.week_end)}  •  {state}")
+        self.potw_name.setText(winner.plant_name)
+        self.potw_badge.setText(winner.badge.upper())
+        self.potw_score.setText(f"{winner.league_score:.0f}%")
+        if winner.score_change is None:
+            change = "geen vorige week"
+        elif winner.score_change > 0:
+            points = abs(round(winner.score_change))
+            change = f"↑ {points} {'punt' if points == 1 else 'punten'} vs. vorige week"
+        elif winner.score_change < 0:
+            points = abs(round(winner.score_change))
+            change = f"↓ {points} {'punt' if points == 1 else 'punten'} vs. vorige week"
+        else:
+            change = "– gelijk aan vorige week"
+        coverage = _percent(winner.online_coverage)
+        self.potw_meta.setText(
+            f"{change}\nData {winner.data_completeness:.0f}%  •  online {coverage}"
+        )
 
     def _request_shutdown(self) -> None:
         if not self.shutdown_armed:
@@ -371,6 +491,7 @@ class DashboardWindow(QMainWindow):
             QMainWindow, QWidget {{ background: {LIGHT_BG}; color: {DARK}; font-family: 'DejaVu Sans'; font-size: 12px; }}
             QFrame#card {{ background: {CARD_BG}; border: 1px solid #dfe9e2; border-radius: 16px; }}
             QFrame#card[waterAlert="true"] {{ background: #fff4f4; border: 4px solid {RED}; }}
+            QFrame#plantOfWeek {{ background: #fff9e7; border: 2px solid #e6c25c; border-radius: 14px; }}
             QLabel#pageTitle {{ color: {DARK}; font-size: 24px; font-weight: 700; }}
             QLabel#subtitle {{ color: {MUTED}; font-size: 12px; }}
             QLabel#sectionTitle {{ color: {DARK}; font-size: 18px; font-weight: 700; }}
@@ -379,6 +500,12 @@ class DashboardWindow(QMainWindow):
             QLabel#waterAlertBanner {{ color: white; background: {RED}; border: 2px solid #a82929; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 800; }}
             QLabel#warning {{ color: #6e5a26; background: #fff8e6; border-radius: 7px; padding: 5px 9px; font-size: 10px; }}
             QLabel#muted {{ color: {MUTED}; }}
+            QLabel#potwTitle {{ color: #9b6b00; font-size: 12px; font-weight: 900; }}
+            QLabel#potwPeriod {{ color: {MUTED}; font-size: 9px; font-weight: 700; }}
+            QLabel#potwName {{ color: {DARK}; font-size: 16px; font-weight: 800; }}
+            QLabel#potwBadge {{ color: #8a5b00; background: #ffedaf; border: 1px solid #e4bf50; border-radius: 8px; padding: 5px 9px; font-size: 10px; font-weight: 900; }}
+            QLabel#potwScore {{ color: #9b6b00; background: white; border: 2px solid #e6c25c; border-radius: 9px; padding: 5px 10px; font-size: 20px; font-weight: 900; }}
+            QLabel#potwMeta {{ color: {MUTED}; font-size: 9px; font-weight: 600; }}
             QLabel#shutdownSchedule {{ color: {MUTED}; font-size: 10px; padding-right: 4px; }}
             QPushButton#shutdownButton {{ color: {RED}; background: white; border: 2px solid {RED}; border-radius: 9px; padding: 7px 14px; font-size: 11px; font-weight: 800; }}
             QPushButton#shutdownButton:hover {{ background: #fff0f0; }}
@@ -485,6 +612,27 @@ def _score_color(value: float | None) -> str:
 
 def _percent(value: float | None) -> str:
     return "No recent data" if value is None else f"{value:.0f}%"
+
+
+def _week_label(start: datetime, end: datetime) -> str:
+    months = (
+        "jan", "feb", "mrt", "apr", "mei", "jun",
+        "jul", "aug", "sep", "okt", "nov", "dec",
+    )
+    week = start.isocalendar().week
+    if start.year == end.year and start.month == end.month:
+        period = f"{start.day}–{end.day} {months[start.month - 1]} {start.year}"
+    elif start.year == end.year:
+        period = (
+            f"{start.day} {months[start.month - 1]}–"
+            f"{end.day} {months[end.month - 1]} {start.year}"
+        )
+    else:
+        period = (
+            f"{start.day} {months[start.month - 1]} {start.year}–"
+            f"{end.day} {months[end.month - 1]} {end.year}"
+        )
+    return f"Week {week}  •  {period}"
 
 
 def _relative(value: datetime | None) -> str:

@@ -5,7 +5,7 @@ import unittest
 
 from vivent_dashboard.cache import load_cache, save_cache
 from vivent_dashboard.mock_data import create_mock_data, inject_test_water_alert
-from vivent_dashboard.ui import POWER_OFF_COMMAND, _water_alert_message
+from vivent_dashboard.ui import POWER_OFF_COMMAND, _water_alert_message, _week_label
 
 
 class DashboardTests(unittest.TestCase):
@@ -36,6 +36,11 @@ class DashboardTests(unittest.TestCase):
             POWER_OFF_COMMAND,
             ["/usr/bin/systemctl", "poweroff", "--no-wall", "--no-ask-password"],
         )
+
+    def test_week_label_runs_from_monday_through_sunday(self):
+        start = datetime.fromisoformat("2026-08-17T00:00:00+02:00")
+        end = datetime.fromisoformat("2026-08-23T23:59:59+02:00")
+        self.assertEqual(_week_label(start, end), "Week 34  •  17–23 aug 2026")
 
 
 if __name__ == "__main__":
