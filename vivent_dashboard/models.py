@@ -26,10 +26,25 @@ class PlantStatus:
 
 
 @dataclass(frozen=True)
+class PlantOfWeek:
+    plant_name: str
+    league_score: float
+    previous_period_score: float | None
+    score_change: float | None
+    data_completeness: float
+    online_coverage: float | None
+    week_start: datetime
+    week_end: datetime
+    badge: str
+    is_final: bool = False
+
+
+@dataclass(frozen=True)
 class DashboardData:
     water_alerts: list[WaterAlert]
     plants: list[PlantStatus]
     fetched_at: datetime
+    plant_of_week: PlantOfWeek | None = None
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
@@ -40,6 +55,10 @@ class DashboardData:
         for item in result["plants"]:
             if item["last_seen"] is not None:
                 item["last_seen"] = item["last_seen"].isoformat()
+        winner = result.get("plant_of_week")
+        if winner is not None:
+            winner["week_start"] = winner["week_start"].isoformat()
+            winner["week_end"] = winner["week_end"].isoformat()
         return result
 
     @classmethod
@@ -52,7 +71,22 @@ class DashboardData:
             PlantStatus(**{**item, "last_seen": _datetime(item.get("last_seen"))})
             for item in value.get("plants", [])
         ]
-        return cls(alerts, plants, _datetime(value["fetched_at"]) or datetime.now().astimezone())
+        winner_value = value.get("plant_of_week")
+        winner = None
+        if winner_value:
+            winner = PlantOfWeek(
+                **{
+                    **winner_value,
+                    "week_start": _datetime(winner_value["week_start"]),
+                    "week_end": _datetime(winner_value["week_end"]),
+                }
+            )
+        return cls(
+            alerts,
+            plants,
+            _datetime(value["fetched_at"]) or datetime.now().astimezone(),
+            winner,
+        )
 
 
 def _datetime(value: str | datetime | None) -> datetime | None:

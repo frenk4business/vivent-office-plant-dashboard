@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta
 
-from .models import DashboardData, PlantStatus, WaterAlert
+from .models import DashboardData, PlantOfWeek, PlantStatus, WaterAlert
 
 
 def create_mock_data() -> DashboardData:
     now = datetime.now().astimezone()
+    week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    week_end = week_start + timedelta(days=7) - timedelta(seconds=1)
     return DashboardData(
         water_alerts=[
             WaterAlert("Anthurium Meeting Room", 18, 17.5, now - timedelta(minutes=8)),
@@ -18,6 +20,17 @@ def create_mock_data() -> DashboardData:
             PlantStatus("Anthurium Window", None, "Offline", "Sensor offline", None, None, None, now - timedelta(hours=2, minutes=5)),
         ],
         fetched_at=now,
+        plant_of_week=PlantOfWeek(
+            plant_name="Strelitzia Entrance",
+            league_score=81,
+            previous_period_score=76,
+            score_change=5,
+            data_completeness=100,
+            online_coverage=94,
+            week_start=week_start,
+            week_end=week_end,
+            badge="Weekkampioen",
+        ),
     )
 
 
@@ -29,4 +42,9 @@ def inject_test_water_alert(data: DashboardData) -> DashboardData:
         16.25,
         datetime.now().astimezone(),
     )
-    return DashboardData([test_alert, *data.water_alerts], data.plants, data.fetched_at)
+    return DashboardData(
+        [test_alert, *data.water_alerts],
+        data.plants,
+        data.fetched_at,
+        data.plant_of_week,
+    )
