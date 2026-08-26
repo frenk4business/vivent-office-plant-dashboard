@@ -24,6 +24,11 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--mock", action="store_true", help="Use built-in demonstration data")
     parser.add_argument("--test-water-alert", action="store_true", help="Show a clearly marked synthetic water alert")
     parser.add_argument("--check-data", action="store_true", help="Fetch once, print a summary, and exit")
+    parser.add_argument(
+        "--sync-channels",
+        action="store_true",
+        help="Discover new active trial sensors, update the local channel list, and exit",
+    )
     parser.add_argument("--screenshot", type=Path, help="Save a UI screenshot and exit")
     return parser.parse_args()
 
@@ -37,6 +42,9 @@ def main() -> int:
     )
 
     if args.mock:
+        if args.sync_channels:
+            logging.error("Channel synchronization is unavailable in mock mode")
+            return 2
         data = create_mock_data()
         fetch = create_mock_data
         refresh_seconds = 300
@@ -57,6 +65,23 @@ def main() -> int:
             logging.error("Configuration error: %s", exc)
             return 2
         repository = DashboardRepository(config)
+
+        if args.sync_channels:
+            try:
+                from vivent_dashboard_private.channel_sync import synchronize_channels
+
+                result = synchronize_channels(config, repository)
+            except Exception as exc:
+                logging.error("Channel synchronization failed: %s", exc)
+                return 1
+            changes = []
+            if result.added:
+                changes.append(f"added {', '.join(result.added)}")
+            if result.renamed:
+                changes.append(f"renamed {', '.join(result.renamed)}")
+            summary = "; ".join(changes) if changes else "no changes"
+            print(f"Channel sync OK via {result.source}: {result.total} plants; {summary}")
+            return 0
 
         def fetch():
             current = repository.fetch()

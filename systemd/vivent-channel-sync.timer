@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Vivent trial sensor discovery
+
+[Timer]
+OnCalendar=*-*-* 08:05:00
+Persistent=true
+RandomizedDelaySec=5m
+Unit=vivent-channel-sync.service
+
+[Install]
+WantedBy=timers.target

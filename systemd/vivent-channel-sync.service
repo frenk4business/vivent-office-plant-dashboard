@@ -1,0 +1,10 @@
+[Unit]
+Description=Discover new active Vivent trial sensors
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/vivent-dashboard
+ExecStart=/usr/bin/python3 -m vivent_dashboard --sync-channels
+Environment=PYTHONUNBUFFERED=1

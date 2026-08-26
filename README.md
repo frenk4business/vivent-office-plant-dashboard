@@ -32,6 +32,7 @@ I created and configured the complete office dashboard installation:
 - an official Vivent Biosignals branded header;
 - a two-step safe shutdown button for the Pi and display;
 - a system timer that safely shuts down the installation every day at 17:00;
+- a daily trial synchronization that discovers newly added active sensors;
 - a layout optimized for the wall display's 1024 × 600 resolution;
 - high-contrast health percentages for readability at a distance.
 
@@ -121,6 +122,13 @@ Application logs are available with:
 ```bash
 journalctl --user -u vivent-dashboard.service
 ```
+
+The `vivent-channel-sync.timer` checks the configured trial once per day at
+approximately 08:05. New active sensors are appended to the local channel list
+and appear at the next five-minute dashboard refresh. Existing entries are not
+removed and manually assigned names are preserved. When metadata names are
+unavailable, a new sensor receives a temporary generated name until metadata
+becomes reachable.
 
 The fullscreen UI has a two-step **PI + DISPLAY UIT** button. The first press
 arms it for eight seconds; the second press requests a clean system power-off.
