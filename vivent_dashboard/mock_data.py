@@ -16,8 +16,7 @@ def create_mock_data() -> DashboardData:
     week_end = week_start + timedelta(days=7) - timedelta(seconds=1)
     return DashboardData(
         water_alerts=[
-            WaterAlert("Anthurium Meeting Room", 18, 17.5, now - timedelta(minutes=8)),
-            WaterAlert("Pachira Lounge", 34, 22.25, now - timedelta(minutes=12)),
+            WaterAlert("Anthurium Meeting Room", 18, 5.5, now - timedelta(minutes=8)),
         ],
         plants=[
             PlantStatus("Anthurium Meeting Room", 27, "Critical", "Low Water Status", 18, 52, 47, now - timedelta(minutes=8)),
@@ -54,8 +53,8 @@ def inject_test_water_alert(data: DashboardData) -> DashboardData:
     plant_name = data.plants[0].plant_name if data.plants else "Testplant"
     test_alert = WaterAlert(
         f"TEST — {plant_name}",
-        32,
-        16.25,
+        25,
+        4.25,
         datetime.now().astimezone(),
     )
     return DashboardData(

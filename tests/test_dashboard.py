@@ -44,10 +44,32 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("EN soil", message)
         self.assertIn("ES tierra", message)
 
+    def test_mock_data_demonstrates_alarm_and_early_warning_levels(self):
+        data = create_mock_data()
+        self.assertTrue(
+            all(
+                alert.water_score < 30 and alert.low_hours > 4
+                for alert in data.water_alerts
+            )
+        )
+        early_warnings = [
+            plant
+            for plant in data.plants
+            if 30 <= (plant.water_score or 0) < 40
+            and plant.main_issue == "Low Water Status"
+        ]
+        self.assertTrue(early_warnings)
+        alerted_names = {alert.plant_name for alert in data.water_alerts}
+        self.assertTrue(
+            all(plant.plant_name not in alerted_names for plant in early_warnings)
+        )
+
     def test_synthetic_alert_is_clearly_marked(self):
         data = inject_test_water_alert(create_mock_data())
         message = _water_alert_message(data.water_alerts)
         self.assertIn("TEST • NIET WATER GEVEN • DO NOT WATER • NO REGAR", message)
+        self.assertLess(data.water_alerts[0].water_score, 30)
+        self.assertGreater(data.water_alerts[0].low_hours, 4)
 
     def test_poweroff_uses_systemd_without_a_shell(self):
         self.assertEqual(

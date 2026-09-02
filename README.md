@@ -41,9 +41,12 @@ I created and configured the complete office dashboard installation:
 
 ### Plants Need Water
 
-Shows only sustained low-water conditions. The alert and safety instruction are
-presented in Dutch, English and Spanish so colleagues can first check whether
-the soil is actually dry.
+Shows only water scores below 30% that remain continuously low for more than
+four hours. A gap between measurements of more than 30 minutes restarts that
+period. Scores from 30% through 39% remain visible as an early `Low Water
+Status` warning in Plant Squad, but do not trigger the prominent alert. The
+alert and safety instruction are presented in Dutch, English and Spanish so
+colleagues can first check whether the soil is actually dry.
 
 ### Plant Squad
 
