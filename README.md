@@ -27,6 +27,7 @@ I created and configured the complete office dashboard installation:
 - a live plant-health and water-alert overview;
 - a weekly plant champion with score, trend, data completeness and online
   coverage;
+- a local Hall of Fame with immutable completed-week winners and a scoreboard;
 - read-only data access, local caching and a clear offline state;
 - mock data and automated tests for development without production access;
 - an official Vivent Biosignals branded header;
@@ -55,7 +56,13 @@ marked instead of being treated as healthy data.
 Highlights the strongest eligible plant for the current Monday-to-Sunday
 period. The card displays the current score, change compared with the previous
 week, data completeness and online coverage. Production scoring rules remain in
-the private connector and are not published in this repository.
+the private connector and are not published in this repository. The current
+week is explicitly shown as a provisional standing.
+
+The compact **HISTORIE** button temporarily replaces the Plant Squad table with
+the Hall of Fame. It shows wins, the latest win and average winning score per
+plant, plus recent weekly winners. It closes automatically after twenty
+seconds, with the close button, or with Escape.
 
 ## Public demo and private data connector
 
@@ -129,6 +136,52 @@ and appear at the next five-minute dashboard refresh. Existing entries are not
 removed and manually assigned names are preserved. When metadata names are
 unavailable, a new sensor receives a temporary generated name until metadata
 becomes reachable.
+
+On the first successful data refresh after 08:05 on Monday, the previous
+Monday-to-Sunday winner is finalized exactly once. This short delay gives the
+metrics pipeline time to settle. Completed results are stored outside the repository in
+`~/.local/state/vivent-dashboard/plant-of-week-history.sqlite3` with mode 600.
+The stable Plant ID is used when available, with the sensor ID as fallback. An
+initial production installation can fill all available completed weeks with:
+
+```bash
+python3 -m vivent_dashboard --backfill-history
+```
+
+To recalculate every completed competition week after a scoring or trial-scope
+correction, use the atomic rebuild command. It creates a mode-600 SQLite backup
+next to the live ledger before replacing any results:
+
+```bash
+python3 -m vivent_dashboard --rebuild-history
+```
+
+The office competition starts with the week of 20 July 2026. Earlier trial
+weeks are deliberately excluded from both the Hall of Fame and backfills.
+
+After an electrode has been reinserted, its old flat signal must not be used as
+an Activity reference. Register the maintenance timestamp locally with:
+
+```bash
+python3 -m vivent_dashboard --record-activity-reset CHANNEL_ID \
+  --reset-at 2026-08-26T10:15:00+02:00
+```
+
+For seven days the dashboard shows Activity as calibrating, calculates Health
+from Water and Nutrients only, and excludes the plant from Plant of the Week.
+Afterwards, Activity uses only measurements recorded after the reset.
+
+If the signal has stabilized earlier and the plant should rejoin immediately,
+end only the calibration period while preserving the original baseline start:
+
+```bash
+python3 -m vivent_dashboard --end-activity-calibration CHANNEL_ID
+```
+
+All Water, Activity, Nutrient, Health and Plant-of-the-Week measurements are
+clamped to each sensor's start and optional stop time in the configured trial.
+If a physical sensor ID was used in another trial, those measurements cannot
+enter the current trial's scores or historical backfills.
 
 The fullscreen UI has a two-step **PI + DISPLAY UIT** button. The first press
 arms it for eight seconds; the second press requests a clean system power-off.

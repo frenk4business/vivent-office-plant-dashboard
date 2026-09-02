@@ -1,6 +1,13 @@
 from datetime import datetime, timedelta
 
-from .models import DashboardData, PlantOfWeek, PlantStatus, WaterAlert
+from .models import (
+    DashboardData,
+    HallOfFameEntry,
+    HistoricalWinner,
+    PlantOfWeek,
+    PlantStatus,
+    WaterAlert,
+)
 
 
 def create_mock_data() -> DashboardData:
@@ -31,6 +38,15 @@ def create_mock_data() -> DashboardData:
             week_end=week_end,
             badge="Weekkampioen",
         ),
+        hall_of_fame=[
+            HallOfFameEntry("plant-strelitzia", "Strelitzia Entrance", 3, week_start - timedelta(days=7), 82),
+            HallOfFameEntry("plant-anthurium", "Anthurium Meeting Room", 2, week_start - timedelta(days=14), 78),
+            HallOfFameEntry("plant-strawberry", "Strawberry Kitchen", 1, week_start - timedelta(days=28), 76),
+        ],
+        recent_winners=[
+            HistoricalWinner(week_start - timedelta(days=7), week_start - timedelta(seconds=1), "plant-strelitzia", "Strelitzia Entrance", 84),
+            HistoricalWinner(week_start - timedelta(days=14), week_start - timedelta(days=7, seconds=1), "plant-anthurium", "Anthurium Meeting Room", 79),
+        ],
     )
 
 
@@ -47,4 +63,6 @@ def inject_test_water_alert(data: DashboardData) -> DashboardData:
         data.plants,
         data.fetched_at,
         data.plant_of_week,
+        data.hall_of_fame,
+        data.recent_winners,
     )

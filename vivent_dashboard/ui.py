@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSizePolicy,
+    QStackedLayout,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -59,9 +60,10 @@ def _official_logo() -> QPixmap:
 
 
 class LogoWidget(QLabel):
-    def __init__(self) -> None:
+    def __init__(self, compact: bool = False) -> None:
         super().__init__()
-        self.setFixedSize(150, 94)
+        width, height = (124, 64) if compact else (150, 94)
+        self.setFixedSize(width, height)
         self.setAlignment(Qt.AlignCenter)
         logo = _official_logo()
         if logo.isNull():
@@ -118,6 +120,7 @@ class DashboardWindow(QMainWindow):
         self.fetch_data = fetch_data
         self.last_data = initial_data
         self.fullscreen = fullscreen
+        self.compact = fullscreen
         self.refreshing = False
         self.signals = RefreshSignals()
         self.signals.success.connect(self._refresh_succeeded)
@@ -125,8 +128,8 @@ class DashboardWindow(QMainWindow):
         self.signals.shutdown_failure.connect(self._shutdown_failed)
         self.shutdown_armed = False
         self.setWindowTitle("Vivent Office Plants – Zeist")
-        self.setMinimumSize(1024, 650)
-        self.setStyleSheet(self._stylesheet())
+        self.setMinimumSize(1024, 600 if self.compact else 650)
+        self.setStyleSheet(self._stylesheet(self.compact))
         self._build_ui()
         if initial_data:
             self.render(initial_data, offline=True, message="Cached data – connecting…")
@@ -142,11 +145,16 @@ class DashboardWindow(QMainWindow):
     def _build_ui(self) -> None:
         root = QWidget()
         root_layout = QVBoxLayout(root)
-        root_layout.setContentsMargins(20, 10, 20, 14)
-        root_layout.setSpacing(10)
+        root_layout.setContentsMargins(
+            20,
+            6 if self.compact else 10,
+            20,
+            8 if self.compact else 14,
+        )
+        root_layout.setSpacing(6 if self.compact else 10)
 
         header = QHBoxLayout()
-        header.addWidget(LogoWidget())
+        header.addWidget(LogoWidget(self.compact))
         title_box = QVBoxLayout()
         title = QLabel("Office Plants")
         title.setObjectName("pageTitle")
@@ -165,8 +173,13 @@ class DashboardWindow(QMainWindow):
         self.water_card = self._card()
         self.water_card.setProperty("waterAlert", False)
         water_layout = QVBoxLayout(self.water_card)
-        water_layout.setContentsMargins(16, 8, 16, 8)
-        water_layout.setSpacing(5)
+        water_layout.setContentsMargins(
+            16,
+            5 if self.compact else 8,
+            16,
+            5 if self.compact else 8,
+        )
+        water_layout.setSpacing(3 if self.compact else 5)
         water_header = QHBoxLayout()
         water_title = QLabel("Plants Need Water")
         water_title.setObjectName("sectionTitle")
@@ -196,9 +209,19 @@ class DashboardWindow(QMainWindow):
         root_layout.addWidget(self.water_card, 0)
 
         squad_card = self._card()
-        squad_layout = QVBoxLayout(squad_card)
-        squad_layout.setContentsMargins(16, 8, 16, 10)
-        squad_layout.setSpacing(5)
+        self.squad_stack = QStackedLayout(squad_card)
+        self.squad_stack.setContentsMargins(0, 0, 0, 0)
+
+        squad_page = QWidget()
+        squad_page.setStyleSheet("background: transparent;")
+        squad_layout = QVBoxLayout(squad_page)
+        squad_layout.setContentsMargins(
+            16,
+            5 if self.compact else 8,
+            16,
+            6 if self.compact else 10,
+        )
+        squad_layout.setSpacing(3 if self.compact else 5)
         squad_header = QHBoxLayout()
         squad_title = QLabel("Plant Squad")
         squad_title.setObjectName("sectionTitle")
@@ -213,6 +236,46 @@ class DashboardWindow(QMainWindow):
             watermark=True,
         )
         squad_layout.addWidget(self.squad_table)
+        self.squad_stack.addWidget(squad_page)
+
+        history_page = QWidget()
+        history_page.setObjectName("historyPage")
+        history_layout = QVBoxLayout(history_page)
+        history_layout.setContentsMargins(
+            16,
+            5 if self.compact else 8,
+            16,
+            6 if self.compact else 10,
+        )
+        history_layout.setSpacing(3 if self.compact else 5)
+        history_header = QHBoxLayout()
+        history_title = QLabel("★  Plant van de Week — Historie")
+        history_title.setObjectName("sectionTitle")
+        self.history_summary = QLabel()
+        self.history_summary.setObjectName("historySummary")
+        self.history_close = QPushButton("SLUITEN  ×")
+        self.history_close.setObjectName("historyClose")
+        self.history_close.setMinimumSize(105, 32)
+        self.history_close.setCursor(Qt.PointingHandCursor)
+        self.history_close.clicked.connect(self._hide_history)
+        history_header.addWidget(history_title)
+        history_header.addStretch()
+        history_header.addWidget(self.history_summary)
+        history_header.addWidget(self.history_close)
+        history_layout.addLayout(history_header)
+        self.history_table = self._table(
+            ["#", "Plant", "Gewonnen", "Laatste winst", "Gem. winscore"]
+        )
+        history_layout.addWidget(self.history_table)
+        self.history_recent = QLabel()
+        self.history_recent.setObjectName("historyRecent")
+        self.history_recent.setWordWrap(True)
+        history_layout.addWidget(self.history_recent)
+        self.squad_stack.addWidget(history_page)
+        self.history_timer = QTimer(self)
+        self.history_timer.setSingleShot(True)
+        self.history_timer.setInterval(20_000)
+        self.history_timer.timeout.connect(self._hide_history)
         root_layout.addWidget(squad_card, 1)
 
         self.potw_card = self._card()
@@ -223,11 +286,21 @@ class DashboardWindow(QMainWindow):
 
         potw_heading = QVBoxLayout()
         potw_heading.setSpacing(1)
+        potw_title_row = QHBoxLayout()
+        potw_title_row.setSpacing(6)
         potw_title = QLabel("★  PLANT VAN DE WEEK")
         potw_title.setObjectName("potwTitle")
+        self.history_button = QPushButton("HISTORIE")
+        self.history_button.setObjectName("historyButton")
+        self.history_button.setMinimumSize(85, 32)
+        self.history_button.setCursor(Qt.PointingHandCursor)
+        self.history_button.clicked.connect(self._show_history)
         self.potw_period = QLabel()
         self.potw_period.setObjectName("potwPeriod")
-        potw_heading.addWidget(potw_title)
+        potw_title_row.addWidget(potw_title)
+        potw_title_row.addWidget(self.history_button)
+        potw_title_row.addStretch()
+        potw_heading.addLayout(potw_title_row)
         potw_heading.addWidget(self.potw_period)
         potw_layout.addLayout(potw_heading)
 
@@ -254,7 +327,7 @@ class DashboardWindow(QMainWindow):
         self.potw_meta.setMinimumWidth(195)
         self.potw_meta.setMaximumWidth(215)
         potw_layout.addWidget(self.potw_meta)
-        self.potw_card.setFixedHeight(72)
+        self.potw_card.setFixedHeight(62 if self.compact else 72)
         root_layout.addWidget(self.potw_card, 0)
 
         footer = QHBoxLayout()
@@ -264,6 +337,7 @@ class DashboardWindow(QMainWindow):
         footer.addWidget(shutdown_schedule)
         self.shutdown_button = QPushButton("PI + DISPLAY UIT")
         self.shutdown_button.setObjectName("shutdownButton")
+        self.shutdown_button.setMinimumSize(175, 36)
         self.shutdown_button.setCursor(Qt.PointingHandCursor)
         self.shutdown_button.clicked.connect(self._request_shutdown)
         footer.addWidget(self.shutdown_button)
@@ -336,6 +410,7 @@ class DashboardWindow(QMainWindow):
         self._render_water(data)
         self._render_squad(data)
         self._render_plant_of_week(data)
+        self._render_history(data)
 
     def _render_water(self, data: DashboardData) -> None:
         alerts = data.water_alerts
@@ -354,7 +429,11 @@ class DashboardWindow(QMainWindow):
             self.water_summary.setStyleSheet(f"color: {GREEN};")
         row_count = max(1, len(alerts))
         self.water_table.setRowCount(row_count)
-        self.water_table.setFixedHeight(32 + row_count * 32)
+        table_header_height = 28 if self.compact else 32
+        table_row_height = 27 if self.compact else 31
+        self.water_table.setFixedHeight(
+            table_header_height + row_count * (table_row_height + 1)
+        )
         if not alerts:
             self.water_table.setItem(0, 0, _item("No plants need water", bold=True, color=GREEN))
             for column in range(1, 4):
@@ -366,7 +445,7 @@ class DashboardWindow(QMainWindow):
                 self.water_table.setItem(row, 2, _item(f"≥ {alert.low_hours:g} h", bold=True, color=RED))
                 self.water_table.setItem(row, 3, _item(_relative(alert.last_seen), color=MUTED))
         for row in range(row_count):
-            self.water_table.setRowHeight(row, 31)
+            self.water_table.setRowHeight(row, table_row_height)
 
     def _render_squad(self, data: DashboardData) -> None:
         self.squad_count.setText(f"{len(data.plants)} monitored plants")
@@ -377,10 +456,12 @@ class DashboardWindow(QMainWindow):
             self.squad_table.setItem(row, 2, _item(plant.status, bold=True, color=_status_color(plant.status)))
             self.squad_table.setItem(row, 3, _item(plant.main_issue, color=_issue_color(plant)))
             self.squad_table.setItem(row, 4, _item(_percent(plant.water_score), color=_score_color(plant.water_score)))
-            self.squad_table.setItem(row, 5, _item(_percent(plant.activity_score), color=_score_color(plant.activity_score)))
+            activity = "Calibrating" if plant.activity_calibrating else _percent(plant.activity_score)
+            activity_color = AMBER if plant.activity_calibrating else _score_color(plant.activity_score)
+            self.squad_table.setItem(row, 5, _item(activity, color=activity_color))
             self.squad_table.setItem(row, 6, _item(_percent(plant.nutrient_score), color=_score_color(plant.nutrient_score)))
             self.squad_table.setItem(row, 7, _item(_relative(plant.last_seen), color=MUTED))
-            self.squad_table.setRowHeight(row, 34)
+            self.squad_table.setRowHeight(row, 30 if self.compact else 34)
         header = self.squad_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
@@ -424,6 +505,51 @@ class DashboardWindow(QMainWindow):
         self.potw_meta.setText(
             f"{change}\nData {winner.data_completeness:.0f}%  •  online {coverage}"
         )
+
+    def _render_history(self, data: DashboardData) -> None:
+        entries = data.hall_of_fame
+        completed = sum(entry.wins for entry in entries)
+        self.history_summary.setText(
+            f"{completed} {'weekwinnaar' if completed == 1 else 'weekwinnaars'}"
+        )
+        self.history_table.setRowCount(len(entries))
+        for row, entry in enumerate(entries):
+            self.history_table.setItem(row, 0, _item(str(row + 1), bold=True, color=AMBER))
+            self.history_table.setItem(row, 1, _item(entry.plant_name, bold=True))
+            self.history_table.setItem(
+                row, 2, _item(f"{entry.wins}×", bold=True, color=GREEN)
+            )
+            self.history_table.setItem(
+                row, 3, _item(_short_date(entry.last_win), color=MUTED)
+            )
+            self.history_table.setItem(
+                row, 4, _item(f"{entry.average_winning_score:.0f}%", color=AMBER)
+            )
+            self.history_table.setRowHeight(row, 31 if self.compact else 36)
+        header = self.history_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        if data.recent_winners:
+            recent = "   •   ".join(
+                f"W{winner.week_start.isocalendar().week}: {winner.plant_name} ({winner.league_score:.0f}%)"
+                for winner in data.recent_winners[:4]
+            )
+            self.history_recent.setText(f"LAATSTE WINNAARS   {recent}")
+        else:
+            self.history_recent.setText(
+                "Nog geen afgesloten week vastgelegd — de actuele week blijft een tussenstand."
+            )
+
+    def _show_history(self) -> None:
+        self.squad_stack.setCurrentIndex(1)
+        self.history_timer.start()
+
+    def _hide_history(self) -> None:
+        self.history_timer.stop()
+        self.squad_stack.setCurrentIndex(0)
 
     def _request_shutdown(self) -> None:
         if not self.shutdown_armed:
@@ -482,23 +608,32 @@ class DashboardWindow(QMainWindow):
             self.show()
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
+        if event.key() == Qt.Key_Escape and self.squad_stack.currentIndex() == 1:
+            self._hide_history()
+            return
         if not self.fullscreen or (event.modifiers() & Qt.ControlModifier and event.modifiers() & Qt.ShiftModifier and event.key() == Qt.Key_Q):
             super().keyPressEvent(event)
 
     @staticmethod
-    def _stylesheet() -> str:
+    def _stylesheet(compact: bool = False) -> str:
+        base_font = 11 if compact else 12
+        section_font = 16 if compact else 18
+        table_padding = "3px 5px" if compact else "4px 6px"
+        header_padding = "4px" if compact else "6px"
+        warning_padding = "3px 7px" if compact else "5px 9px"
+        shutdown_padding = "6px 16px" if compact else "7px 16px"
         return f"""
-            QMainWindow, QWidget {{ background: {LIGHT_BG}; color: {DARK}; font-family: 'DejaVu Sans'; font-size: 12px; }}
+            QMainWindow, QWidget {{ background: {LIGHT_BG}; color: {DARK}; font-family: 'DejaVu Sans'; font-size: {base_font}px; }}
             QFrame#card {{ background: {CARD_BG}; border: 1px solid #dfe9e2; border-radius: 16px; }}
             QFrame#card[waterAlert="true"] {{ background: #fff4f4; border: 4px solid {RED}; }}
             QFrame#plantOfWeek {{ background: #fff9e7; border: 2px solid #e6c25c; border-radius: 14px; }}
             QLabel#pageTitle {{ color: {DARK}; font-size: 24px; font-weight: 700; }}
             QLabel#subtitle {{ color: {MUTED}; font-size: 12px; }}
-            QLabel#sectionTitle {{ color: {DARK}; font-size: 18px; font-weight: 700; }}
+            QLabel#sectionTitle {{ color: {DARK}; font-size: {section_font}px; font-weight: 700; }}
             QLabel#connection {{ font-size: 11px; font-weight: 600; padding: 6px; }}
             QLabel#waterSummary {{ font-size: 12px; font-weight: 700; }}
             QLabel#waterAlertBanner {{ color: white; background: {RED}; border: 2px solid #a82929; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 800; }}
-            QLabel#warning {{ color: #6e5a26; background: #fff8e6; border-radius: 7px; padding: 5px 9px; font-size: 10px; }}
+            QLabel#warning {{ color: #6e5a26; background: #fff8e6; border-radius: 7px; padding: {warning_padding}; font-size: 10px; }}
             QLabel#muted {{ color: {MUTED}; }}
             QLabel#potwTitle {{ color: #9b6b00; font-size: 12px; font-weight: 900; }}
             QLabel#potwPeriod {{ color: {MUTED}; font-size: 9px; font-weight: 700; }}
@@ -506,14 +641,19 @@ class DashboardWindow(QMainWindow):
             QLabel#potwBadge {{ color: #8a5b00; background: #ffedaf; border: 1px solid #e4bf50; border-radius: 8px; padding: 5px 9px; font-size: 10px; font-weight: 900; }}
             QLabel#potwScore {{ color: #9b6b00; background: white; border: 2px solid #e6c25c; border-radius: 9px; padding: 5px 10px; font-size: 20px; font-weight: 900; }}
             QLabel#potwMeta {{ color: {MUTED}; font-size: 9px; font-weight: 600; }}
+            QLabel#historySummary {{ color: {MUTED}; font-size: 10px; font-weight: 700; }}
+            QLabel#historyRecent {{ color: {MUTED}; background: #fff9e7; border: 1px solid #ead68f; border-radius: 7px; padding: 6px 9px; font-size: 9px; font-weight: 700; }}
+            QPushButton#historyButton {{ color: #8a5b00; background: white; border: 1px solid #e4bf50; border-radius: 7px; padding: 5px 10px; font-size: 10px; font-weight: 900; }}
+            QPushButton#historyButton:hover {{ background: #ffedaf; }}
+            QPushButton#historyClose {{ color: #8a5b00; background: #fff9e7; border: 1px solid #e4bf50; border-radius: 7px; padding: 5px 10px; font-size: 10px; font-weight: 900; }}
             QLabel#shutdownSchedule {{ color: {MUTED}; font-size: 10px; padding-right: 4px; }}
-            QPushButton#shutdownButton {{ color: {RED}; background: white; border: 2px solid {RED}; border-radius: 9px; padding: 7px 14px; font-size: 11px; font-weight: 800; }}
+            QPushButton#shutdownButton {{ color: {RED}; background: white; border: 2px solid {RED}; border-radius: 9px; padding: {shutdown_padding}; font-size: 12px; font-weight: 800; }}
             QPushButton#shutdownButton:hover {{ background: #fff0f0; }}
             QPushButton#shutdownButton[armed="true"] {{ color: white; background: {RED}; border: 2px solid #a82929; }}
             QPushButton#shutdownButton:disabled {{ color: white; background: {MUTED}; border-color: {MUTED}; }}
             QTableWidget {{ background: transparent; alternate-background-color: #f7faf8; border: none; color: {DARK}; }}
-            QTableWidget::item {{ padding: 4px 6px; border-bottom: 1px solid #e8efea; }}
-            QHeaderView::section {{ background: #edf4ef; color: {MUTED}; border: none; border-bottom: 1px solid #d9e6dd; padding: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; }}
+            QTableWidget::item {{ padding: {table_padding}; border-bottom: 1px solid #e8efea; }}
+            QHeaderView::section {{ background: #edf4ef; color: {MUTED}; border: none; border-bottom: 1px solid #d9e6dd; padding: {header_padding}; font-size: 9px; font-weight: 700; text-transform: uppercase; }}
             QScrollBar:vertical {{ background: transparent; width: 8px; }}
             QScrollBar::handle:vertical {{ background: #b7cabd; border-radius: 4px; min-height: 25px; }}
             QProgressBar {{ border: none; background: #e7eee9; border-radius: 6px; min-width: 78px; min-height: 18px; }}
@@ -633,6 +773,14 @@ def _week_label(start: datetime, end: datetime) -> str:
             f"{end.day} {months[end.month - 1]} {end.year}"
         )
     return f"Week {week}  •  {period}"
+
+
+def _short_date(value: datetime) -> str:
+    months = (
+        "jan", "feb", "mrt", "apr", "mei", "jun",
+        "jul", "aug", "sep", "okt", "nov", "dec",
+    )
+    return f"W{value.isocalendar().week} • {value.day} {months[value.month - 1]}"
 
 
 def _relative(value: datetime | None) -> str:
